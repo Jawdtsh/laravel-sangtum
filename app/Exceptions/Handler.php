@@ -9,6 +9,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -51,6 +52,9 @@ class Handler extends ExceptionHandler
 
         if ($exception instanceof QueryException) {
             return response()->json(['error' => 'Database error'], 500);
+        }
+        if ($exception instanceof ValidationException ){
+            return response()->json(['error' => $exception->errors()], 422);
         }
 
         return response()->json(['error' => 'Server error'], 500);

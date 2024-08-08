@@ -64,9 +64,7 @@ class AuthController extends Controller
     public function ResendVerificationCode(RequireEmailRequest $email): JsonResponse
     {
 
-        if(!$user = User::where('email', $email['email'])->first()) {
-            return $this->errorResponse('لم يتم تجسيل هذا الحساب في موقعنا بعد',404);
-        }
+        $user = User::where('email', $email['email'])->first();
 
         if($user->email_verified) {
             return $this->errorResponse('يبدو بان حسابك مؤكد بالفعل',400);
@@ -105,11 +103,10 @@ class AuthController extends Controller
 
     public function Resend2FaCode(RequireEmailRequest $email): JsonResponse
     {
-        if(!$user = User::where('email', $email['email'])->first()) {
-            return $this->errorResponse('لم يتم تجسيل هذا الحساب في موقعنا بعد',404);
-        }
+        $user = User::where('email', $email['email'])->first();
+
         if(!$user->email_verified) {
-            return $this->errorResponse('يبدو بان حسابك  لم يتم تاكيده حتى الان تروج منك تايكد حسابك قبل طلب كود 2fa',403);
+            return $this->errorResponse('يبدو بان حسابك  لم يتم تاكيده حتى الان نروج منك تايكد حسابك قبل طلب كود 2fa',403);
         }
         return $this->SendCodeToEmail('تمت عمليت اعادة ارسال كود 2fa بنجاح',$user);
     }
@@ -123,19 +120,17 @@ class AuthController extends Controller
         $ipAddress = request()->ip();
         $cacheData = Cache::get($ipAddress);
 
-        if (!($cacheData  && isset($cacheData['email'], $cacheData['code']) && $cacheData['email'] === $request['email'])) {
-            return $this->errorResponse('لم يتم العثور على كود تحقق لهذا العنوان IP',404);
+        if (!($cacheData  && isset($cacheData['email'], $cacheData['code']))) {
+            return $this->errorResponse('يبدو ان الكود قد انتهت صلاحيته',404);
         }
 
-        if (!$user = User::where('email', $request['email'])->first()) {
-            return $this->errorResponse('لم يتم العثور على حساب لدينا لهذا البريد الإلكتروني',404);
-        }
+        $user = User::where('email', $request['email'])->first();
 
         if (!$user->email_verified) {
             return $this->errorResponse('يبدو أن حسابك لم يفعل بعد، نرجو تأكيد حسابك أولاً.',403);
         }
 
-        if (!($cacheData['code'] === $request['email_verification_code'])) {
+        if (!($cacheData['code'] === $request['email_verification_code']&& $cacheData['email'] === $request['email'])) {
             return $this->errorResponse('يبدو أن الكود الذي أدخلته غير صحيح',400);
         }
 
@@ -162,9 +157,6 @@ class AuthController extends Controller
 
     public function refreshToken(Request $request): JsonResponse
     {
-        if (!Auth::user()) {
-            return $this->errorResponse('يبدو بانك لم تقم بتسجيل الدخول', 401);
-        }
 
         $user = $request->user();
         $user->currentAccessToken()->delete();
@@ -180,21 +172,19 @@ class AuthController extends Controller
     public function verifyEmailCode(verifyCodeRequest $request): JsonResponse
     {
 
+        ($user = User::where('email', $request['email'])->first());
+        if(!$user->email_verified) {
+            return $this->errorResponse('يبدو بان حسابك مفعل بالفعل',400);
+        }
+
         $ipAddress = request()->ip();
-
-
         $cacheData = Cache::get($ipAddress);
 
-        if (!(isset($cacheData['email'], $cacheData['code']) && $cacheData && $cacheData['email'] === $request['email'])) {
-            return $this->errorResponse('لم يتم العثور على كود تحقق لهذا العنوان IP',404);
+        if (!( $cacheData && isset($cacheData['email'], $cacheData['code']) )) {
+            return $this->errorResponse('يبدو انك لم تطلب كود التحقق او ان كود التحقق قد انتهت صلاحيته',404);
         }
-        if (!($user = User::where('email', $request['email'])->first())) {
-            return $this->errorResponse('لم يتم العثور على حساب لدينا لهذا الايميل',404);
-        }
-        if ($user->email_verified) {
-                    return $this->errorResponse('يبدو أن حسابك مفعل بالفعل',400);
-        }
-        if (!($cacheData['code'] === $request['email_verification_code'])) {
+
+        if (!($cacheData['code'] === $request['email_verification_code'] && $cacheData['email'] === $request['email'])) {
             return $this->errorResponse('يبدو أن الكود الذي أدخلته غير صحيح',400);
         }
 

@@ -30,7 +30,6 @@ Route::post('/resend-2fa-code',[AuthController::class, 'Resend2FaCode']);
 Route::get('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 Route::get('/refresh-token',[AuthController::class, 'refreshToken'])->middleware('auth:sanctum');
 
-Route::get('/TestGenerateCode',[AuthController::class, 'TestGenerateCode']);
 
 
 
