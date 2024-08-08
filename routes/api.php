@@ -24,16 +24,21 @@ Route::post('/register', [AuthController::class,'register']);
 Route::post('/login', [AuthController::class,'login']);
 Route::post('/verify-email',[AuthController::class, 'verifyEmailCode']);
 Route::post('/Verify2FA',[AuthController::class, 'Verify2FaCode']);
-Route::get('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
-Route::get('/refresh-token',[AuthController::class, 'refreshToken']);
 Route::post('/resend-verification-code',[AuthController::class, 'ResendVerificationCode']);
 Route::post('/resend-2fa-code',[AuthController::class, 'Resend2FaCode']);
+
+Route::get('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+Route::get('/refresh-token',[AuthController::class, 'refreshToken'])->middleware('auth:sanctum');
+
+Route::get('/TestGenerateCode',[AuthController::class, 'TestGenerateCode']);
 
 
 
 
 require __DIR__ . '/ApiTestException.php';
 
-
+Route::fallback(static function () {
+    return response()->json(['message' => 'Not Found.'], 404);
+});
 
 

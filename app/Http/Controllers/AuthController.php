@@ -2,19 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\LoginRequest;
-use App\Http\Requests\RegisterRequest;
-use App\Http\Requests\RequireEmailRequest;
-use App\Http\Requests\verifyCodeRequest;
+use App\Http\Requests\{
+    LoginRequest,
+    RegisterRequest,
+    RequireEmailRequest,
+    verifyCodeRequest,
+};
+use Illuminate\Support\Facades\{
+    Auth,
+    Cache,
+    Hash
+};
+use Illuminate\Http\{
+    JsonResponse,
+    Request};
+use App\Traits\{
+    ApiResponseHandlerTrait,
+    FileHandlerTrait,
+    VerifiableCodeTrait
+};
 use App\Models\User;
-use App\Traits\ApiResponseHandlerTrait;
-use App\Traits\FileHandlerTrait;
-use App\Traits\VerifiableCodeTrait;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -45,8 +52,8 @@ class AuthController extends Controller
         ]);
 
         return $this->SendCodeToEmail(
-            $user,
             'تم تسجيل حسابك بنجاح. لتاكيد الايميل نرجو التحقق من البريد الوارد على الايميل الخاص بك.'
+            ,$user
         );
 
     }
@@ -54,17 +61,18 @@ class AuthController extends Controller
 
 
 
-
     public function ResendVerificationCode(RequireEmailRequest $email): JsonResponse
     {
 
-       if($user = User::where('email', $email['email'])->first()) {
-            if($user->email_verified) {
-                return $this->errorResponse('يبدو بان حسابك مؤكد بالفعل');
-            }
-           return $this->SendCodeToEmail($user, 'تمت عمليت العادة ارسال كود التاكيد بنجاح');
-       }
-        return $this->errorResponse('لم يتم تجسيل هذا الحساب في موقعنا بعد');
+        if(!$user = User::where('email', $email['email'])->first()) {
+            return $this->errorResponse('لم يتم تجسيل هذا الحساب في موقعنا بعد',404);
+        }
+
+        if($user->email_verified) {
+            return $this->errorResponse('يبدو بان حسابك مؤكد بالفعل',400);
+        }
+
+        return $this->SendCodeToEmail('تمت عمليت العادة ارسال كود التاكيد بنجاح',$user);
 
     }
 
@@ -78,19 +86,17 @@ class AuthController extends Controller
 
         $user = User::where('email', $identifier)->orWhere('phone_number', $identifier)->first();
 
-        // Check the user and his password if they are correct.
+
         if (!$user || !Hash::check($password, $user->password)) {
             return $this->errorResponse('بيانات تسجيل الدخول غير صحيحة', 401);
         }
 
-        // Verify email confirmation
+
         if (!$user->email_verified) {
             return $this->errorResponse('يبدو انك لم تقم بتاكيد حسابك حتى الان, ارجو ان تقوم بتاكيد حسابك لتسجيل الدخول بنجاح', 403);
         }
 
-        return $this->SendCodeToEmail($user,
-            'لمتابعى تسجيل الدخول نرجو مراجعة الايميل الخاص بك لتاكيد ال 2fa'
-            );
+        return $this->SendCodeToEmail('لمتابعى تسجيل الدخول نرجو مراجعة الايميل الخاص بك لتاكيد ال 2fa',$user);
     }
 
 
@@ -99,76 +105,43 @@ class AuthController extends Controller
 
     public function Resend2FaCode(RequireEmailRequest $email): JsonResponse
     {
-        if($user = User::where('email', $email['email'])->first()) {
-            if(!$user->email_verified) {
-                return $this->errorResponse('يبدو بان حسابك  لم يتم تاكيده حتى الان تروج منك تايكد حسابك قبل طلب كود 2fa');
-            }
-            return $this->SendCodeToEmail($user, 'تمت عمليت اعادة ارسال كود 2fa بنجاح');
+        if(!$user = User::where('email', $email['email'])->first()) {
+            return $this->errorResponse('لم يتم تجسيل هذا الحساب في موقعنا بعد',404);
         }
-        return $this->errorResponse('لم يتم تجسيل هذا الحساب في موقعنا بعد');
+        if(!$user->email_verified) {
+            return $this->errorResponse('يبدو بان حسابك  لم يتم تاكيده حتى الان تروج منك تايكد حسابك قبل طلب كود 2fa',403);
+        }
+        return $this->SendCodeToEmail('تمت عمليت اعادة ارسال كود 2fa بنجاح',$user);
     }
+
 
 
 
 
     public function Verify2FaCode(verifyCodeRequest $request): JsonResponse
     {
-
         $ipAddress = request()->ip();
-
-
         $cacheData = Cache::get($ipAddress);
 
-
-        if ($cacheData && isset($cacheData['email']) && isset($cacheData['code'])) {
-            if ($cacheData['email'] === $request['email']) {
-                if ($user = User::where('email', $request['email'])->first()) {
-                    if (!$user->email_verified) {
-                        return $this->errorResponse('يبدو أن حسابك لم يفعل بعد، نرجو تأكيد حسابك أولاً.');
-                    }
-
-                    if ($cacheData['code'] === $request['email_verification_code']) {
-                        $token = $user->createToken('Personal Access Token', ['*'], now()->addMinutes(10))->plainTextToken;
-                        return $this->successResponse('your token is: '.$token, 'لقد تم تأكيد الحساب');
-                    }
-
-                    return $this->errorResponse('يبدو أن الكود الذي أدخلته غير صحيح');
-                }
-
-                return $this->errorResponse('لم يتم العثور على حساب لدينا لهذا البريد الإلكتروني');
-            }
+        if (!($cacheData  && isset($cacheData['email'], $cacheData['code']) && $cacheData['email'] === $request['email'])) {
+            return $this->errorResponse('لم يتم العثور على كود تحقق لهذا العنوان IP',404);
         }
 
-        return $this->errorResponse('لم يتم العثور على كود تحقق لهذا العنوان IP');
+        if (!$user = User::where('email', $request['email'])->first()) {
+            return $this->errorResponse('لم يتم العثور على حساب لدينا لهذا البريد الإلكتروني',404);
+        }
+
+        if (!$user->email_verified) {
+            return $this->errorResponse('يبدو أن حسابك لم يفعل بعد، نرجو تأكيد حسابك أولاً.',403);
+        }
+
+        if (!($cacheData['code'] === $request['email_verification_code'])) {
+            return $this->errorResponse('يبدو أن الكود الذي أدخلته غير صحيح',400);
+        }
+
+        $token = $user->createToken('Personal Access Token', ['*'], now()->addMinutes(10))->plainTextToken;
+        return $this->successResponse('your token is: '.$token, 'لقد تم تأكيد الحساب');
     }
-
-
-
-
-
-
-
-//    public function Verify2FaCode(verifyCodeRequest $request): JsonResponse
-//    {
-//
-//        if($user = User::where('email', $request['email'])->first()){
-//
-//            if(!$user->email_verified){
-//                return $this->errorResponse('يبدو بان حسباك لم يفعل بعد نرجو ان تقوم بتاكيد حسابك ثم تاكيد حسابك ب 2fa');
-//            }
-//
-//            if ($user->email_verification_code === $request['email_verification_code']) {
-//
-//                $token = $user->createToken('Personal Access Token', ['*'], now()->addMinutes(10))->plainTextToken;
-//                return $this->successResponse('your token is : '.$token,'لقد تم تاكيد الحساب ');
-//
-//            }
-//
-//            return $this->errorResponse('يبدو بان الكود الذي ادخلته غير صحيح');
-//
-//        }
-//        return $this->errorResponse('لم يتم العثور على حساب لدينا لهذا الايميل');
-//    }
 
 
 
@@ -189,40 +162,18 @@ class AuthController extends Controller
 
     public function refreshToken(Request $request): JsonResponse
     {
-        if (Auth::user()) {
-            $user = $request->user();
-            $user->currentAccessToken()->delete();
-            $newToken = $user->createToken('Personal Access Token', ['*'], now()->addMinutes(20))->plainTextToken;
-
-            return $this->successResponse(['token' => $newToken], 'Token refreshed successfully', 201);
+        if (!Auth::user()) {
+            return $this->errorResponse('يبدو بانك لم تقم بتسجيل الدخول', 401);
         }
-        return $this->errorResponse('يبدو بانك لم تقم بتسجيل الدخول', 401);
+
+        $user = $request->user();
+        $user->currentAccessToken()->delete();
+        $newToken = $user->createToken('Personal Access Token', ['*'], now()->addMinutes(20))->plainTextToken;
+        return $this->successResponse(['token' => $newToken], 'Token refreshed successfully', 201);
+
     }
 
 
-
-
-//    public function verifyEmailCode(verifyCodeRequest $request): JsonResponse
-//    {
-//
-//        if($user = User::where('email', $request['email'])->first()){
-//
-//            if($user->email_verified ){
-//                return $this->errorResponse('يبدو بان حسابك مفعل بالفعل');
-//            }
-//
-//            if ($user->email_verification_code === $request['email_verification_code']) {
-//                $user->email_verified = true;
-//                $user->save();
-//
-//                return $this->successMessage('لقد تم تاكيد الحساب ');
-//            }
-//            return $this->errorResponse('يبدو بان الكود الذي ادخلته غير صحيح');
-//        }
-//
-//        return $this->errorResponse('لم يتم العثور على حساب لدينا لهذا الايميل');
-//
-//    }
 
 
 
@@ -234,32 +185,25 @@ class AuthController extends Controller
 
         $cacheData = Cache::get($ipAddress);
 
-        if (isset($cacheData['email'], $cacheData['code']) && $cacheData && $cacheData['email'] === $request['email']) {
-            if ($user = User::where('email', $request['email'])->first()) {
-                if ($user->email_verified) {
-                    return $this->errorResponse('يبدو أن حسابك مفعل بالفعل');
-                }
-
-                if ($cacheData['code'] === $request['email_verification_code']) {
-                    $user->email_verified = true;
-                    $user->save();
-
-                    // قم بإزالة البيانات من الكاش بعد التحقق الناجح
-                    Cache::forget($ipAddress);
-
-                    return $this->successMessage('لقد تم تأكيد الحساب');
-                }
-                return $this->errorResponse('يبدو أن الكود الذي أدخلته غير صحيح');
-            }
-
-            return $this->errorResponse('لم يتم العثور على حساب لدينا لهذا الايميل');
+        if (!(isset($cacheData['email'], $cacheData['code']) && $cacheData && $cacheData['email'] === $request['email'])) {
+            return $this->errorResponse('لم يتم العثور على كود تحقق لهذا العنوان IP',404);
+        }
+        if (!($user = User::where('email', $request['email'])->first())) {
+            return $this->errorResponse('لم يتم العثور على حساب لدينا لهذا الايميل',404);
+        }
+        if ($user->email_verified) {
+                    return $this->errorResponse('يبدو أن حسابك مفعل بالفعل',400);
+        }
+        if (!($cacheData['code'] === $request['email_verification_code'])) {
+            return $this->errorResponse('يبدو أن الكود الذي أدخلته غير صحيح',400);
         }
 
-        return $this->errorResponse('لم يتم العثور على كود تحقق لهذا العنوان IP');
+        $user->email_verified = true;
+        $user->save();
+
+            Cache::forget($ipAddress);
+
+            return $this->successMessage('لقد تم تأكيد الحساب');
     }
-
-
-
-
 
 }

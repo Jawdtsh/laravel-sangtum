@@ -4,13 +4,11 @@ namespace App\Exceptions;
 
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Log;
-use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -22,37 +20,39 @@ class Handler extends ExceptionHandler
         'password_confirmation',
     ];
 
-    public function register(): void
+    public function render($request, Throwable $e): JsonResponse
     {
-        $this->renderable(function (Throwable $e, Request $request) {
-            return $this->handleException($request, $e);
-        });
+        return $this->HandleException($e);
     }
 
-    /**
-     * @throws Throwable
-     */
-    protected function handleException(Request $request, Throwable $exception)
+    protected function HandleException(Throwable $exception): JsonResponse
     {
-         Log::info('Handling exception of type: ' . get_class($exception));
-
-        $handlers = [
-            AuthenticationException::class => UnauthorizedErrorHandler::class,
-            AuthorizationException::class => ForbiddenErrorHandler::class,
-            NotFoundHttpException::class => NotFoundErrorHandler::class,
-            ThrottleRequestsException::class => ThrottleRequestsErrorHandler::class,
-            HttpException::class => InternalServerErrorHandler::class,
-            QueryException::class => QueryErrorHandler::class,
-        ];
-
-        foreach ($handlers as $type => $handler) {
-            if ($exception instanceof $type) {
-                Log::info('Found handler for: ' . get_class($exception));
-                return App::make($handler)->handle($request, $exception);
-            }
+        if ($exception instanceof ModelNotFoundException) {
+            return response()->json([
+                'error' => 'Resource not found'
+            ], 404);
         }
 
-               Log::info('No specific handler found, using parent render method');
-        return $this->render($request, $exception);
+        if ($exception instanceof NotFoundHttpException) {
+            return response()->json(['error' => 'Resource not found'], 404);
+        }
+
+        if ($exception instanceof AuthenticationException) {
+            return response()->json(['error' => 'Unauthenticated'], 401);
+        }
+
+        if ($exception instanceof ThrottleRequestsException) {
+            return response()->json(['error' => 'Too many requests'], 429);
+        }
+
+        if ($exception instanceof AuthorizationException) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        if ($exception instanceof QueryException) {
+            return response()->json(['error' => 'Database error'], 500);
+        }
+
+        return response()->json(['error' => 'Server error'], 500);
     }
 }
