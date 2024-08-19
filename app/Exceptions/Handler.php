@@ -21,9 +21,15 @@ class Handler extends ExceptionHandler
         'password_confirmation',
     ];
 
-    public function render($request, Throwable $e): JsonResponse
+//    public function render($request, Throwable $e): JsonResponse
+//    {
+//        return $this->HandleException($e);
+//    }
+    public function register(): void
     {
-        return $this->HandleException($e);
+        $this->reportable(function (Throwable $e) {
+            //
+        });
     }
 
     protected function HandleException(Throwable $exception): JsonResponse

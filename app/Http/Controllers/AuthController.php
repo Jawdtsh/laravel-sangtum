@@ -173,7 +173,7 @@ class AuthController extends Controller
     {
 
         ($user = User::where('email', $request['email'])->first());
-        if(!$user->email_verified) {
+        if($user->email_verified) {
             return $this->errorResponse('يبدو بان حسابك مفعل بالفعل',400);
         }
 
