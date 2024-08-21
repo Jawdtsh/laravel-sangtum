@@ -9,7 +9,6 @@ use App\Http\Requests\{
     verifyCodeRequest,
 };
 use Illuminate\Support\Facades\{
-    Auth,
     Cache,
     Hash
 };
