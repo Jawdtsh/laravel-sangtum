@@ -1,7 +1,8 @@
 <?php
 
-use App\Http\Controllers\AuthController;
-use Illuminate\Http\Request;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\ProductController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -15,26 +16,20 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+
+Route::group(['middleware' => ['auth:sanctum']], static function () {
+
+    Route::apiResource('/product', ProductController::class);
+    Route::apiResource('/categories', CategoryController::class);
+
+    Route::post('/orders/{order}', [OrderController::class, 'update']);
+    Route::apiResource('/orders', OrderController::class);
 });
-
-
-Route::post('/register', [AuthController::class,'register']);
-Route::post('/login', [AuthController::class,'login']);
-Route::post('/verify-email',[AuthController::class, 'verifyEmailCode']);
-Route::post('/Verify2FA',[AuthController::class, 'Verify2FaCode']);
-Route::post('/resend-verification-code',[AuthController::class, 'ResendVerificationCode']);
-Route::post('/resend-2fa-code',[AuthController::class, 'Resend2FaCode']);
-
-Route::get('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
-Route::get('/refresh-token',[AuthController::class, 'refreshToken'])->middleware('auth:sanctum');
-
-
 
 
 
 require __DIR__ . '/ApiTestException.php';
+require __DIR__ . '/AuthApi.php';
 
 Route::fallback(static function () {
     return response()->json(['message' => 'Not Found.'], 404);

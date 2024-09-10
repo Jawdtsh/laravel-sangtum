@@ -16,6 +16,7 @@ class Kernel extends ConsoleKernel
         // $schedule->command('inspire')->hourly();
          $schedule->command('app:delete-expired-token-command')->everySixHours();
          $schedule->command('app:delete-expired-token-command')->everySecond();
+         $schedule->command('orders:delete-delivered')->daily();
     }
 
     /**

@@ -21,10 +21,12 @@ use App\Traits\{
     VerifiableCodeTrait
 };
 use App\Models\User;
+use RuntimeException;
 
 class AuthController extends Controller
 {
     use VerifiableCodeTrait ,FileHandlerTrait ,ApiResponseHandlerTrait;
+
 
 
     public function register(RegisterRequest $request): JsonResponse
@@ -144,7 +146,6 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        // Revoke the token that was used to authenticate the current request
         $request->user()->currentAccessToken()->delete();
 
         return $this->successMessage('تم تسجيل الخروج بنجاح');
@@ -194,5 +195,15 @@ class AuthController extends Controller
 
             return $this->successMessage('لقد تم تأكيد الحساب');
     }
+
+    public function createToken()
+    {
+        $user = User::find(1);
+        if (!$user) {
+            throw new RuntimeException('User not found');
+        }
+        return $user->createToken('Personal Access Token', ['*'])->plainTextToken;
+    }
+
 
 }
